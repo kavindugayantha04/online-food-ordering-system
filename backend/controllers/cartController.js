@@ -3,6 +3,7 @@ const Cart = require("../models/Cart");
 const mapCartItem = (item) => ({
   id: item._id,
   foodName: item.foodName,
+  image: item.image,
   price: item.price,
   quantity: item.quantity,
   totalPrice: item.totalPrice,
@@ -44,7 +45,7 @@ exports.getCart = async (req, res) => {
 
 exports.addToCart = async (req, res) => {
   try {
-    const { foodName, price, quantity = 1 } = req.body;
+    const { foodName, image, price, quantity = 1 } = req.body;
 
     if (!foodName || Number(price) <= 0 || Number(quantity) <= 0) {
       return res.status(400).json({
@@ -69,6 +70,7 @@ exports.addToCart = async (req, res) => {
     } else {
       cart.items.push({
         foodName: normalizedFoodName,
+        image: image || "",
         price: numericPrice,
         quantity: numericQty,
         totalPrice: numericPrice * numericQty,
@@ -166,4 +168,9 @@ exports.clearCart = async (req, res) => {
     console.error("Clear cart error:", error.message);
     return res.status(500).json({ message: "Server error clearing cart" });
   }
+};
+
+exports.__testables = {
+  calculateSubtotal,
+  mapCartItem,
 };
