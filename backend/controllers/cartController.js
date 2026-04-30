@@ -67,6 +67,9 @@ exports.addToCart = async (req, res) => {
     if (existingItem) {
       existingItem.quantity += numericQty;
       existingItem.totalPrice = existingItem.quantity * existingItem.price;
+      existingItem.image = image || existingItem.image;
+      cart.markModified('items');
+      
     } else {
       cart.items.push({
         foodName: normalizedFoodName,
