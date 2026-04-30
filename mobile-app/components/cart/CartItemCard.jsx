@@ -1,12 +1,25 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
+
+const fallbackImage =
+  "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1200&auto=format&fit=crop";
 
 export default function CartItemCard({ item, onIncrease, onDecrease, onRemove }) {
   return (
     <View style={styles.card}>
-      <View style={styles.itemInfo}>
-        <Text style={styles.name}>{item.foodName}</Text>
-        <Text style={styles.meta}>Unit Price: ${item.price.toFixed(2)}</Text>
-        <Text style={styles.meta}>Total: ${item.totalPrice.toFixed(2)}</Text>
+      <View style={styles.topRow}>
+        <View style={styles.imageWrap}>
+          <Image
+            source={{ uri: item.image || fallbackImage }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        </View>
+
+        <View style={styles.itemInfo}>
+          <Text style={styles.name}>{item.foodName}</Text>
+          <Text style={styles.meta}>Unit Price: ${item.price.toFixed(2)}</Text>
+          <Text style={styles.total}>Total: ${item.totalPrice.toFixed(2)}</Text>
+        </View>
       </View>
 
       <View style={styles.actions}>
@@ -33,14 +46,36 @@ export default function CartItemCard({ item, onIncrease, onDecrease, onRemove })
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#E5E7EB",
     padding: 14,
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   itemInfo: {
-    marginBottom: 10,
+    flex: 1,
+    marginLeft: 10,
+  },
+  imageWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#E5E7EB",
+    flexShrink: 0,
+  },
+  image: {
+    width: "100%",
+    height: "100%",
   },
   name: {
     fontSize: 16,
@@ -51,6 +86,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: "#666",
     fontSize: 14,
+  },
+  total: {
+    marginTop: 4,
+    color: "#0F766E",
+    fontSize: 14,
+    fontWeight: "700",
   },
   actions: {
     flexDirection: "row",
