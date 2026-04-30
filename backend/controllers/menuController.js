@@ -43,6 +43,7 @@ const defaultMenuItems = [
   },
 ];
 
+
 exports.getMenuItems = async (req, res) => {
   try {
     let menuItems = await MenuItem.find({ isAvailable: true }).sort({ createdAt: 1 });
