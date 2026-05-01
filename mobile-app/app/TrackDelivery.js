@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { BASE_URL } from "../constants/config";
 import { Image } from "react-native";
+import { ScrollView } from "react-native";
+
 
 import {
   View,
@@ -94,6 +96,7 @@ export default function TrackDelivery() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>🚚 Track Delivery</Text>
 
       {/* Driver Card */}
@@ -166,6 +169,8 @@ export default function TrackDelivery() {
           />
         </View>
       )}
+
+        </ScrollView>
     </SafeAreaView>
   );
 }

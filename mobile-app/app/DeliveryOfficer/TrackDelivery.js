@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
+import { ScrollView } from "react-native";
 import {
   View,
   Text,
@@ -156,8 +157,10 @@ export default function TrackDeliveryDo({ route }) {
 
   const actions = getNextAction(delivery.status);
 
-  return (
-    <SafeAreaView style={styles.container}>
+return (
+  <SafeAreaView style={styles.container}>
+    <ScrollView showsVerticalScrollIndicator={false}>
+
       <Text style={styles.title}>🚚 Delivery Panel</Text>
 
       {!!feedback && (
@@ -193,19 +196,7 @@ export default function TrackDeliveryDo({ route }) {
         <Text style={styles.value}>{delivery.estimatedTime}</Text>
       </View>
 
-      {delivery?.proofImage && (
-        <View style={styles.card}>
-          <Text style={styles.label}>📸 Proof Image</Text>
-
-          <Image
-            source={{ uri: delivery.proofImage }}
-            style={styles.previewImage}
-          />
-        </View>
-      )}
-
       
-
       {proofImage && (
         <View style={styles.preview}>
           <Image source={{ uri: proofImage.uri }} style={styles.image} />
@@ -213,27 +204,24 @@ export default function TrackDeliveryDo({ route }) {
         </View>
       )}
 
-      <Text style={styles.section}>Next Action</Text>
+      {/* <Text style={styles.section}>Next Action</Text> */}
 
       {actions.length === 0 ? (
-
-        
         <Text style={styles.completedText}>🎉 Delivery Completed</Text>
       ) : (
         <>
           {actions.includes("On the way") && (
             <TouchableOpacity
-              style={[
-                styles.btn,
-                styles.blueBtn,
-                updating && styles.disabledBtn,
-              ]}
+              style={[styles.btn, styles.blueBtn, updating && styles.disabledBtn]}
               onPress={() => handleUpdate("On the way")}
               disabled={updating}
             >
               <Text style={styles.btnText}>📦 Start Delivery</Text>
             </TouchableOpacity>
           )}
+
+        
+
 
           {actions.includes("Delivered") && (
             <>
@@ -248,11 +236,7 @@ export default function TrackDeliveryDo({ route }) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[
-                  styles.btn,
-                  styles.greenBtn,
-                  updating && styles.disabledBtn,
-                ]}
+                style={[styles.btn, styles.greenBtn, updating && styles.disabledBtn]}
                 onPress={() => handleUpdate("Delivered")}
                 disabled={updating}
               >
@@ -260,7 +244,21 @@ export default function TrackDeliveryDo({ route }) {
               </TouchableOpacity>
             </>
           )}
+
+
+          
         </>
+      )}
+
+
+  {delivery?.proofImage && (
+        <View style={styles.card}>
+          <Text style={styles.label}>📸 Proof Image</Text>
+          <Image
+            source={{ uri: delivery.proofImage }}
+            style={styles.previewImage}
+          />
+        </View>
       )}
 
       {updating && (
@@ -269,8 +267,10 @@ export default function TrackDeliveryDo({ route }) {
           <Text style={styles.loadingText}>Updating status...</Text>
         </View>
       )}
-    </SafeAreaView>
-  );
+
+    </ScrollView>
+  </SafeAreaView>
+);
 }
 
 const styles = StyleSheet.create({

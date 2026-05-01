@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ScrollView } from "react-native";
 import {
   View,
   Text,
@@ -82,6 +83,7 @@ export default function DeliveryListPage() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>Delivery List</Text>
 
       <View style={styles.tableHeader}>
@@ -104,6 +106,7 @@ export default function DeliveryListPage() {
           </View>
         }
       />
+      </ScrollView>
     </SafeAreaView>
   );
 }
