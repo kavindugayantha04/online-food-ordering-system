@@ -1,13 +1,26 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Button } from 'react-native';
+import { useRouter } from "expo-router";
 
 export default function Index() {
+
+  const router = useRouter(); // ✅ meka add karanna
+
   return (
     <View style={styles.container}>
       <Text style={styles.text}>QuickBite 🚀</Text>
+      
+      <Button
+        title="Customer Track Delivery"
+        onPress={() => router.push("/TrackDelivery")}
+      />
+
+      <Button
+        title="Driver Track Delivery"
+        onPress={() => router.push("/DeliveryOfficer/home")}
+      />
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -19,5 +32,5 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: 'white',
-  },
+  }
 });
