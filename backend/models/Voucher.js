@@ -14,15 +14,26 @@ const voucherSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
-    type: {
+     type: {
       type: String,
-      required: true,
       enum: ["percentage", "fixed"],
       default: "percentage",
     },
     expiryDate: {
       type: Date,
       required: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    usageLimit: {
+      type: Number,
+      default: 0, // 0 = unlimited
+    },
+    usedCount: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }
