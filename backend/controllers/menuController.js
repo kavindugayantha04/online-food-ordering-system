@@ -46,27 +46,22 @@ const defaultMenuItems = [
 
 exports.getMenuItems = async (req, res) => {
   try {
-    let menuItems = await MenuItem.find({ isAvailable: true }).sort({ createdAt: 1 });
+    const menuItems = await FoodItem.find().sort({ createdAt: -1 });
 
-    // Seed a few starter menu items so the cart screen works
-    // before the dedicated menu module is completed.
-    if (menuItems.length === 0) {
-      await MenuItem.insertMany(defaultMenuItems);
-      menuItems = await MenuItem.find({ isAvailable: true }).sort({ createdAt: 1 });
-    }
-
-    return res.status(200).json(
+    res.status(200).json(
       menuItems.map((item) => ({
         id: item._id,
+        name: item.name,
         foodName: item.name,
-        price: item.price,
         description: item.description,
+        price: item.price,
         category: item.category,
         image: item.image,
+        availability: item.availability,
       }))
     );
   } catch (error) {
     console.error("Get menu items error:", error.message);
-    return res.status(500).json({ message: "Server error fetching menu items" });
+    res.status(500).json({ message: "Server error fetching menu items" });
   }
 };
