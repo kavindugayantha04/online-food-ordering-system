@@ -1,748 +1,687 @@
-import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
   TextInput,
   Image,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+import { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import MenuItemCard from "../components/cart/MenuItemCard";
-import CartItemCard from "../components/cart/CartItemCard";
-import CartSummary from "../components/cart/CartSummary";
-import { getMenuItems } from "../services/menuService";
-import {
-  addCartItem,
-  getCart,
-  removeCartItem,
-  updateCartItemQuantity,
-} from "../services/cartService";
-import { applyVoucher as applyVoucherRequest } from "../services/voucherService";
+import * as ImagePicker from "expo-image-picker";
 
-export default function CartScreen() {
+import {
+  getCart,
+  updateCartQuantity,
+  removeCartItemApi,
+} from "../services/api";
+
+import { applyVoucherApi } from "../services/voucherApi";
+
+import CartItemCard from "../components/CartItemCard";
+import CartSummary from "../components/CartSummary";
+
+const VOUCHER_STORAGE_KEY = "appliedVoucher";
+
+export default function Cart() {
   const router = useRouter();
-  const [menuItems, setMenuItems] = useState([]);
-  const [cartItems, setCartItems] = useState([]);
-  const [searchText, setSearchText] = useState("");
-  const [selectedNavItem, setSelectedNavItem] = useState(null);
-  const [isNavOpen, setIsNavOpen] = useState(false);
+
+  const [cart, setCart] = useState({ items: [], subtotal: 0 });
+  const [loading, setLoading] = useState(true);
+
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherImage, setVoucherImage] = useState(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
   const [voucherMessage, setVoucherMessage] = useState("");
-  const [voucherMessageType, setVoucherMessageType] = useState("info");
-  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
-  const [appliedVoucher, setAppliedVoucher] = useState(null);
-  const [toastMessage, setToastMessage] = useState("");
-  const [toastType, setToastType] = useState("success");
+  const [voucherError, setVoucherError] = useState("");
 
-  // Load local menu data when the screen opens.
+  const [discount, setDiscount] = useState(0);
+  const [finalTotal, setFinalTotal] = useState(0);
+  const [appliedVoucher, setAppliedVoucher] = useState("");
+
   useEffect(() => {
-    loadInitialData();
+    loadCart();
   }, []);
 
-  useEffect(() => {
-    if (!toastMessage) {
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      setToastMessage("");
-    }, 2200);
-
-    return () => clearTimeout(timer);
-  }, [toastMessage]);
-
-  const loadInitialData = async () => {
-    try {
-      const [items] = await Promise.all([getMenuItems(), loadCart()]);
-      setMenuItems(items || []);
-    } catch (error) {
-      Alert.alert("Cart", error?.message || "Could not load menu items.");
-    }
-  };
-
-  // READ: Load cart items from backend.
   const loadCart = async () => {
-    const data = await getCart();
-    setCartItems(data.items || []);
-    return data;
-  };
-
-  // CREATE: Add an item to cart (or increase quantity if it exists).
-  const addToCart = async (menuItem) => {
     try {
-      const data = await addCartItem({
-        foodName: menuItem.foodName,
-        image: menuItem.image,
-        price: menuItem.price,
-        quantity: 1,
-      });
-      setCartItems(data.items || []);
-      setToastType("success");
-      setToastMessage(`${menuItem.foodName} added to cart successfully`);
-    } catch (error) {
-      setToastType("error");
-      setToastMessage(`${menuItem.foodName || "Item"} could not be added`);
-      Alert.alert("Add Item", error?.response?.data?.message || error?.message);
-    }
-  };
+      setLoading(true);
 
-  // UPDATE: Increase quantity by 1.
-  const increaseQuantity = async (itemId) => {
-    try {
-      const selected = cartItems.find((item) => item.id === itemId);
-      if (!selected) return;
+      const token = await AsyncStorage.getItem("token");
 
-      const data = await updateCartItemQuantity(itemId, selected.quantity + 1);
-      setCartItems(data.items || []);
-    } catch (error) {
-      Alert.alert("Update Item", error?.response?.data?.message || error?.message);
-    }
-  };
-
-  // UPDATE: Decrease quantity by 1 (remove if quantity reaches 0).
-  const decreaseQuantity = async (itemId) => {
-    try {
-      const selected = cartItems.find((item) => item.id === itemId);
-      if (!selected) return;
-
-      if (selected.quantity <= 1) {
-        const data = await removeCartItem(itemId);
-        setCartItems(data.items || []);
+      if (!token) {
+        Alert.alert("Error", "Please login again.");
+        router.replace("/login");
         return;
       }
 
-      const data = await updateCartItemQuantity(itemId, selected.quantity - 1);
-      setCartItems(data.items || []);
-    } catch (error) {
-      Alert.alert("Update Item", error?.response?.data?.message || error?.message);
-    }
-  };
+      const data = await getCart(token);
 
-  // DELETE: Remove a cart item completely.
-  const removeFromCart = async (itemId) => {
-    try {
-      const data = await removeCartItem(itemId);
-      setCartItems(data.items || []);
-    } catch (error) {
-      Alert.alert("Remove Item", error?.response?.data?.message || error?.message);
-    }
-  };
+      const items = data.items || [];
+      const subtotal = data.subtotal || 0;
 
-  const totalCartPrice = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  }, [cartItems]);
+      setCart({ items, subtotal });
 
-  const totalCartItems = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  }, [cartItems]);
+      // Restore previously applied voucher (if any) from AsyncStorage.
+      const savedRaw = await AsyncStorage.getItem(VOUCHER_STORAGE_KEY);
 
-  const voucherDiscountAmount = useMemo(() => {
-    if (!appliedVoucher?.discount || totalCartPrice <= 0) {
-      return 0;
-    }
+      if (savedRaw && items.length > 0) {
+        try {
+          const saved = JSON.parse(savedRaw);
 
-    if (appliedVoucher.type === "fixed") {
-      return Number(Math.min(appliedVoucher.discount, totalCartPrice).toFixed(2));
-    }
-
-    return Number(((totalCartPrice * appliedVoucher.discount) / 100).toFixed(2));
-  }, [appliedVoucher, totalCartPrice]);
-
-  const discountedTotal = useMemo(() => {
-    return Number(Math.max(totalCartPrice - voucherDiscountAmount, 0).toFixed(2));
-  }, [totalCartPrice, voucherDiscountAmount]);
-
-  const filteredMenuItems = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
-
-    if (!query) {
-      return menuItems;
-    }
-
-    return menuItems.filter((item) => {
-      const name = item.foodName?.toLowerCase() || "";
-      return name.includes(query);
-    });
-  }, [menuItems, searchText]);
-
-  const menuImageByFoodName = useMemo(() => {
-    return menuItems.reduce((acc, menuItem) => {
-      const key = menuItem.foodName?.trim().toLowerCase();
-      if (key && menuItem.image) {
-        acc[key] = menuItem.image;
+          if (saved && saved.code) {
+            setVoucherCode(saved.code);
+            setAppliedVoucher(saved.code);
+            setDiscount(saved.discount || 0);
+            setFinalTotal(
+              typeof saved.finalTotal === "number"
+                ? saved.finalTotal
+                : subtotal
+            );
+            setVoucherMessage("Voucher applied successfully.");
+            return;
+          }
+        } catch (parseError) {
+          console.log("Failed to parse stored voucher:", parseError.message);
+        }
       }
-      return acc;
-    }, {});
-  }, [menuItems]);
 
-  const navItems = [
-    { label: "Home", icon: "home-outline", route: "/dashboard" },
-    { label: "Menu List", icon: "restaurant-outline", route: null },
-    { label: "Your Cart", icon: "cart-outline", route: "/cart" },
-    { label: "Order", icon: "receipt-outline", route: null },
-    { label: "Payment", icon: "card-outline", route: null },
-    { label: "Delivery", icon: "bicycle-outline", route: null },
-    { label: "Review", icon: "chatbubble-ellipses-outline", route: null },
-  ];
+      // Cart is empty: drop any persisted voucher.
+      if (items.length === 0) {
+        await AsyncStorage.removeItem(VOUCHER_STORAGE_KEY);
+      }
 
-  const handleNavPress = (item) => {
-    setSelectedNavItem(item.label);
-    setIsNavOpen(false);
-
-    if (item.route) {
-      router.push(item.route);
-      return;
+      setFinalTotal(subtotal);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Failed to load cart.");
+    } finally {
+      setLoading(false);
     }
-
-    Alert.alert(item.label, "This module will be connected in the next step.");
   };
 
-  const selectVoucherImage = async () => {
+  const resetVoucher = async (newSubtotal) => {
+    setDiscount(0);
+    setFinalTotal(newSubtotal || 0);
+    setAppliedVoucher("");
+    setVoucherMessage("");
+    setVoucherError("");
+
     try {
+      await AsyncStorage.removeItem(VOUCHER_STORAGE_KEY);
+    } catch (e) {
+      console.log("Failed to clear voucher storage:", e.message);
+    }
+  };
+
+  const increaseQty = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const item = cart.items.find((i) => (i._id || i.id) === id);
+
+      if (!item) return;
+
+      const cartItemId = item._id || item.id;
+
+      const updated = await updateCartQuantity(
+        cartItemId,
+        item.quantity + 1,
+        token
+      );
+
+      setCart({
+        items: updated.items || [],
+        subtotal: updated.subtotal || 0,
+      });
+
+      await resetVoucher(updated.subtotal || 0);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Could not update quantity.");
+    }
+  };
+
+  const decreaseQty = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const item = cart.items.find((i) => (i._id || i.id) === id);
+
+      if (!item) return;
+
+      if (item.quantity === 1) {
+        removeItem(id);
+        return;
+      }
+
+      const cartItemId = item._id || item.id;
+
+      const updated = await updateCartQuantity(
+        cartItemId,
+        item.quantity - 1,
+        token
+      );
+
+      setCart({
+        items: updated.items || [],
+        subtotal: updated.subtotal || 0,
+      });
+
+      await resetVoucher(updated.subtotal || 0);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Could not update quantity.");
+    }
+  };
+
+  const removeItem = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const item = cart.items.find((i) => (i._id || i.id) === id);
+      const cartItemId = (item && (item._id || item.id)) || id;
+
+      const updated = await removeCartItemApi(cartItemId, token);
+
+      setCart({
+        items: updated.items || [],
+        subtotal: updated.subtotal || 0,
+      });
+
+      await resetVoucher(updated.subtotal || 0);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Could not remove item.");
+    }
+  };
+
+  const pickVoucherImage = async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Permission Required", "Please allow image access.");
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets?.length) {
+      if (!result.canceled) {
         setVoucherImage(result.assets[0]);
       }
     } catch (error) {
-      Alert.alert("Voucher Image", "Unable to open image picker.");
+      Alert.alert("Error", "Could not select voucher image.");
     }
   };
 
-  const handleApplyVoucher = async () => {
-    const code = voucherCode.trim();
+  const applyVoucher = async () => {
+    try {
+      setVoucherError("");
+      setVoucherMessage("");
 
-    if (!code) {
-      setVoucherMessageType("error");
-      setVoucherMessage("Please enter a voucher code.");
-      return;
+      if (!voucherCode.trim()) {
+        setVoucherError("Voucher code is required.");
+        return;
+      }
+
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert("Error", "Please login again.");
+        router.replace("/login");
+        return;
+      }
+
+      setVoucherLoading(true);
+
+      const data = await applyVoucherApi(
+        voucherCode,
+        cart.subtotal,
+        voucherImage,
+        token
+      );
+
+      const appliedDiscount = data.discount || 0;
+      const computedFinal = data.finalTotal || cart.subtotal;
+      const code = data.voucherCode || voucherCode.toUpperCase();
+
+      setDiscount(appliedDiscount);
+      setFinalTotal(computedFinal);
+      setAppliedVoucher(code);
+      setVoucherMessage(data.message || "Voucher applied successfully.");
+
+      try {
+        await AsyncStorage.setItem(
+          VOUCHER_STORAGE_KEY,
+          JSON.stringify({
+            code,
+            discount: appliedDiscount,
+            finalTotal: computedFinal,
+          })
+        );
+      } catch (e) {
+        console.log("Failed to persist voucher:", e.message);
+      }
+    } catch (error) {
+      setDiscount(0);
+      setFinalTotal(cart.subtotal || 0);
+      setAppliedVoucher("");
+      setVoucherError(error.message || "Invalid voucher code.");
+
+      try {
+        await AsyncStorage.removeItem(VOUCHER_STORAGE_KEY);
+      } catch (e) {
+        console.log("Failed to clear voucher storage:", e.message);
+      }
+    } finally {
+      setVoucherLoading(false);
     }
+  };
+
+  const clearVoucher = async () => {
+    setVoucherCode("");
+    setVoucherImage(null);
+    setDiscount(0);
+    setFinalTotal(cart.subtotal || 0);
+    setAppliedVoucher("");
+    setVoucherMessage("");
+    setVoucherError("");
 
     try {
-      setIsApplyingVoucher(true);
-      const response = await applyVoucherRequest({
-        code,
-        cartTotal: totalCartPrice,
-        voucherImageAsset: voucherImage,
-      });
-
-      setAppliedVoucher(response.voucher);
-      setVoucherMessageType("success");
-      setVoucherMessage(response.message || "Voucher applied successfully.");
-    } catch (error) {
-      setAppliedVoucher(null);
-      setVoucherMessageType("error");
-      setVoucherMessage(error?.response?.data?.message || error?.message || "Invalid voucher code.");
-    } finally {
-      setIsApplyingVoucher(false);
+      await AsyncStorage.removeItem(VOUCHER_STORAGE_KEY);
+    } catch (e) {
+      console.log("Failed to clear voucher storage:", e.message);
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {isNavOpen && (
-        <>
-          <TouchableOpacity style={styles.drawerBackdrop} onPress={() => setIsNavOpen(false)} />
-          <View style={styles.drawer}>
-            <Text style={styles.navTitle}>QuickBite</Text>
-            {navItems.map((item) => {
-              const isActive = item.label === selectedNavItem;
-              return (
-                <TouchableOpacity
-                  key={item.label}
-                  style={[styles.navItem, isActive && styles.navItemActive]}
-                  onPress={() => handleNavPress(item)}
-                >
-                  <Ionicons
-                    name={item.icon}
-                    size={18}
-                    color={isActive ? "#111827" : "#4B5563"}
-                    style={styles.navIcon}
-                  />
-                  <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{item.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </>
-      )}
+  const handlePlaceOrder = () => {
+  router.push({
+    pathname: "/order-details",
+    params: {
+      cartItems: JSON.stringify(cart.items),
+      totalPrice: displayFinalTotal.toString(),
+    },
+  });
+};
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroRow}>
-          <TouchableOpacity style={styles.menuButton} onPress={() => setIsNavOpen(true)}>
-            <Ionicons name="menu-outline" size={34} color="#0F172A" />
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#F97316" />
+        <Text style={styles.loadingText}>Loading cart...</Text>
+      </View>
+    );
+  }
+
+  const totalItems = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmount = cart.subtotal || 0;
+  const displayFinalTotal = finalTotal || totalAmount;
+
+  if (cart.items.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>Your Cart</Text>
+
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyMain}>Cart is empty</Text>
+          <Text style={styles.emptySub}>Add some food from the menu.</Text>
+
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => router.push("/menu")}
+          >
+            <Text style={styles.menuBtnText}>Go to Menu</Text>
           </TouchableOpacity>
-
-          <View style={styles.hero}>
-            <Text style={styles.heading}>Flavor Fusion</Text>
-            <Text style={styles.heroSub}>Select your favorite treats and order with a tap!</Text>
-          </View>
         </View>
+      </View>
+    );
+  }
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Menu Items</Text>
-          <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={18} color="#6B7280" />
-            <TextInput
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder="Search food items..."
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
-          {filteredMenuItems.length === 0 ? (
-            <Text style={styles.emptyText}>No menu item found for "{searchText.trim()}".</Text>
-          ) : (
-            filteredMenuItems.map((item) => (
-              <MenuItemCard key={item.id} item={item} onAdd={addToCart} />
-            ))
-          )}
-        </View>
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Your Cart</Text>
+      <Text style={styles.subtitle}>Review your selected food items</Text>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Cart</Text>
-          {cartItems.length === 0 ? (
-            <Text style={styles.emptyText}>Your cart is empty. Add some food items.</Text>
-          ) : (
-            cartItems.map((item) => (
-              <CartItemCard
-                key={item.id}
-                item={{
-                  ...item,
-                  image: item.image || menuImageByFoodName[item.foodName?.trim().toLowerCase()],
-                }}
-                onIncrease={increaseQuantity}
-                onDecrease={decreaseQuantity}
-                onRemove={removeFromCart}
-              />
-            ))
-          )}
-          <CartSummary totalAmount={totalCartPrice} totalItems={totalCartItems} />
-        </View>
+      {cart.items.map((item, index) => {
+        const itemId = item._id || item.id;
 
-        {cartItems.length > 0 && (
-          <>
-            <View style={styles.voucherCard}>
-              <Text style={styles.voucherTitle}>Apply Voucher</Text>
+        return (
+          <CartItemCard
+            key={itemId || `${item.foodName}-${index}`}
+            item={{
+              ...item,
+              id: itemId,
+            }}
+            onIncrease={increaseQty}
+            onDecrease={decreaseQty}
+            onRemove={removeItem}
+          />
+        );
+      })}
 
-              <View style={styles.voucherInputWrap}>
-                <TextInput
-                  style={styles.voucherInput}
-                  value={voucherCode}
-                  onChangeText={setVoucherCode}
-                  placeholder="Enter voucher code (e.g., SAVE10)"
-                  placeholderTextColor="#9CA3AF"
-                  autoCapitalize="characters"
-                />
-              </View>
+      <View style={styles.voucherBox}>
+        <Text style={styles.voucherTitle}>Apply Voucher</Text>
+        <Text style={styles.voucherSub}>
+          Enter a valid voucher code. Voucher image is optional.
+        </Text>
 
-              <TouchableOpacity style={styles.uploadButton} onPress={selectVoucherImage}>
-                <Ionicons name="cloud-upload-outline" size={16} color="#111827" />
-                <Text style={styles.uploadButtonText}>
-                  {voucherImage?.uri ? "Change Voucher Image" : "Upload Voucher Image (Optional)"}
-                </Text>
-              </TouchableOpacity>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter voucher code"
+          value={voucherCode}
+          onChangeText={setVoucherCode}
+          autoCapitalize="characters"
+        />
 
-              {voucherImage?.uri && <Image source={{ uri: voucherImage.uri }} style={styles.voucherPreview} />}
+        <TouchableOpacity style={styles.imageBtn} onPress={pickVoucherImage}>
+          <Text style={styles.imageBtnText}>
+            {voucherImage ? "Change Voucher Image" : "Upload Voucher Image Optional"}
+          </Text>
+        </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.applyButton, isApplyingVoucher && styles.applyButtonDisabled]}
-                onPress={handleApplyVoucher}
-                disabled={isApplyingVoucher}
-              >
-                <Text style={styles.applyButtonText}>
-                  {isApplyingVoucher ? "Applying..." : "Apply Voucher"}
-                </Text>
-              </TouchableOpacity>
-
-              {!!voucherMessage && (
-                <Text
-                  style={[
-                    styles.voucherMessage,
-                    voucherMessageType === "success"
-                      ? styles.voucherSuccessText
-                      : styles.voucherErrorText,
-                  ]}
-                >
-                  {voucherMessage}
-                </Text>
-              )}
-
-              <View style={styles.voucherTotals}>
-                {appliedVoucher?.code && (
-                  <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Applied Voucher</Text>
-                    <Text style={styles.totalValue}>
-                      {appliedVoucher.code} (
-                      {appliedVoucher.type === "fixed"
-                        ? `$${appliedVoucher.discount.toFixed(2)} off`
-                        : `${appliedVoucher.discount}% off`}
-                      )
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Subtotal</Text>
-                  <Text style={styles.totalValue}>${totalCartPrice.toFixed(2)}</Text>
-                </View>
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Discount</Text>
-                  <Text style={styles.discountValue}>-${voucherDiscountAmount.toFixed(2)}</Text>
-                </View>
-                <View style={styles.totalDivider} />
-                <View style={styles.totalRow}>
-                  <Text style={styles.finalTotalLabel}>Total After Discount</Text>
-                  <Text style={styles.finalTotalValue}>${discountedTotal.toFixed(2)}</Text>
-                </View>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.orderButton}
-              onPress={() =>
-                Alert.alert(
-                  "Order",
-                  `Order amount: $${discountedTotal.toFixed(
-                    2
-                  )}. Order action will continue in the Order module.`
-                )
-              }
-            >
-              <Text style={styles.orderButtonText}>Place Order</Text>
+        {voucherImage && (
+          <View style={styles.previewBox}>
+            <Image source={{ uri: voucherImage.uri }} style={styles.previewImg} />
+            <TouchableOpacity onPress={() => setVoucherImage(null)}>
+              <Text style={styles.removeImageText}>Remove Image</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
 
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/dashboard")}>
-          <Text style={styles.backButtonText}>Back to Dashboard</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        {voucherError ? (
+          <Text style={styles.errorText}>{voucherError}</Text>
+        ) : null}
 
-      {!!toastMessage && (
-        <View
-          style={[
-            styles.toast,
-            toastType === "success" ? styles.toastSuccess : styles.toastError,
-          ]}
-        >
-          <Text style={styles.toastText}>{toastMessage}</Text>
+        {voucherMessage ? (
+          <Text style={styles.successText}>
+            {voucherMessage} {appliedVoucher ? `(${appliedVoucher})` : ""}
+          </Text>
+        ) : null}
+
+        <View style={styles.voucherBtnRow}>
+          <TouchableOpacity
+            style={styles.applyBtn}
+            onPress={applyVoucher}
+            disabled={voucherLoading}
+          >
+            {voucherLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.applyBtnText}>Apply</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.clearBtn} onPress={clearVoucher}>
+            <Text style={styles.clearBtnText}>Clear</Text>
+          </TouchableOpacity>
         </View>
-      )}
-    </SafeAreaView>
+      </View>
+
+      <CartSummary
+        totalItems={totalItems}
+        totalAmount={totalAmount}
+        onViewCart={() => {}}
+        showButton={false}
+      />
+
+      <View style={styles.totalBox}>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Subtotal</Text>
+          <Text style={styles.totalValue}>Rs. {totalAmount.toFixed(2)}</Text>
+        </View>
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Discount</Text>
+          <Text style={styles.discountValue}>- Rs. {discount.toFixed(2)}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.totalRow}>
+          <Text style={styles.finalLabel}>Final Total</Text>
+          <Text style={styles.finalValue}>
+            Rs. {displayFinalTotal.toFixed(2)}
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.placeOrderBtn} onPress={handlePlaceOrder}>
+        <Text style={styles.placeOrderText}>Proceed to Order</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Text style={styles.backText}>Back</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
-  drawerBackdrop: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(17, 24, 39, 0.35)",
-    zIndex: 20,
-  },
-  drawer: {
-    position: "absolute",
-    top: 16,
-    bottom: 16,
-    left: 12,
-    width: "72%",
-    maxWidth: 300,
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    zIndex: 21,
+    backgroundColor: "#FFF7ED",
   },
   content: {
-    padding: 16,
+    padding: 20,
+    paddingTop: 55,
     paddingBottom: 30,
   },
-  heroRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 18,
-     
-  
-  },
-  navTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 12,
-  },
-  navItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  navItemActive: {
-    backgroundColor: "#E5E7EB",
-  },
-  navIcon: {
-    marginRight: 10,
-  },
-  navLabel: {
-    fontSize: 14,
-    color: "#4B5563",
-    fontWeight: "500",
-  },
-  navLabelActive: {
-    color: "#111827",
-    fontWeight: "700",
-  },
-  hero: {
-    flex: 1,
-    backgroundColor: "#111827",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#0B1220",
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-  },
-  menuButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    backgroundColor: "transparent",
-  },
-  heading: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  heroSub: {
-    marginTop: 4,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#E5E7EB",
-    fontWeight: "700",
-  },
-  section: {
-    marginBottom: 18,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: "800",
-    marginBottom: 10,
+  title: {
+    fontSize: 34,
+    fontWeight: "900",
     color: "#111827",
   },
-  searchWrap: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    color: "#111827",
-    fontSize: 14,
-  },
-  emptyText: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#eee",
-    padding: 14,
+  subtitle: {
+    fontSize: 15,
     color: "#6B7280",
+    marginTop: 6,
+    marginBottom: 22,
   },
-  orderButton: {
-    backgroundColor: "#16A34A",
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  orderButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  voucherCard: {
+  voucherBox: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 22,
+    padding: 18,
+    marginTop: 18,
+    marginBottom: 16,
   },
   voucherTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "900",
     color: "#111827",
-    marginBottom: 10,
   },
-  voucherInputWrap: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-    backgroundColor: "#F9FAFB",
-  },
-  voucherInput: {
-    height: 42,
-    color: "#111827",
-    fontSize: 14,
-  },
-  uploadButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    paddingVertical: 10,
-    backgroundColor: "#F9FAFB",
-    marginBottom: 10,
-  },
-  uploadButtonText: {
-    color: "#111827",
-    marginLeft: 8,
-    fontWeight: "600",
+  voucherSub: {
     fontSize: 13,
+    color: "#6B7280",
+    marginTop: 5,
+    marginBottom: 14,
   },
-  voucherPreview: {
-    width: "100%",
-    height: 140,
-    borderRadius: 12,
-    marginBottom: 10,
-    backgroundColor: "#E5E7EB",
+  input: {
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#111827",
+    backgroundColor: "#FFF7ED",
   },
-  applyButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
+  imageBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#F97316",
+    borderRadius: 14,
     paddingVertical: 12,
     alignItems: "center",
   },
-  applyButtonDisabled: {
-    opacity: 0.65,
+  imageBtnText: {
+    color: "#F97316",
+    fontWeight: "800",
   },
-  applyButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  voucherMessage: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  voucherSuccessText: {
-    color: "#15803D",
-  },
-  voucherErrorText: {
-    color: "#B91C1C",
-  },
-  voucherTotals: {
+  previewBox: {
     marginTop: 12,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 10,
+    alignItems: "center",
+  },
+  previewImg: {
+    width: 130,
+    height: 130,
+    borderRadius: 14,
+    resizeMode: "cover",
+  },
+  removeImageText: {
+    color: "#DC2626",
+    marginTop: 8,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#DC2626",
+    marginTop: 10,
+    fontWeight: "700",
+  },
+  successText: {
+    color: "#16A34A",
+    marginTop: 10,
+    fontWeight: "700",
+  },
+  voucherBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  applyBtn: {
+    flex: 1,
+    backgroundColor: "#F97316",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  applyBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
+  clearBtn: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  clearBtnText: {
+    color: "#374151",
+    fontWeight: "900",
+  },
+  totalBox: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    padding: 18,
+    marginTop: 16,
   },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 10,
   },
   totalLabel: {
-    fontSize: 13,
-    color: "#4B5563",
-    fontWeight: "600",
+    color: "#6B7280",
+    fontSize: 15,
+    fontWeight: "700",
   },
   totalValue: {
-    fontSize: 13,
     color: "#111827",
-    fontWeight: "700",
-  },
-  discountValue: {
-    fontSize: 13,
-    color: "#059669",
-    fontWeight: "700",
-  },
-  totalDivider: {
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    marginVertical: 6,
-  },
-  finalTotalLabel: {
-    fontSize: 14,
-    color: "#111827",
-    fontWeight: "700",
-  },
-  finalTotalValue: {
     fontSize: 15,
-    color: "#111827",
     fontWeight: "800",
   },
-  backButton: {
-    backgroundColor: "#374151",
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: "center",
-    marginTop: 6,
-  },
-  backButtonText: {
-    color: "#fff",
+  discountValue: {
+    color: "#16A34A",
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
   },
-  toast: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+  divider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 8,
   },
-  toastSuccess: {
-    backgroundColor: "#16A34A",
+  finalLabel: {
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "900",
   },
-  toastError: {
-    backgroundColor: "#DC2626",
+  finalValue: {
+    color: "#F97316",
+    fontSize: 18,
+    fontWeight: "900",
   },
-  toastText: {
+  placeOrderBtn: {
+    backgroundColor: "#F97316",
+    paddingVertical: 16,
+    borderRadius: 18,
+    marginTop: 18,
+    alignItems: "center",
+  },
+  placeOrderText: {
     color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  backBtn: {
+    padding: 15,
+    marginTop: 8,
+    alignItems: "center",
+  },
+  backText: {
+    color: "#6B7280",
     fontWeight: "700",
-    textAlign: "center",
+  },
+  center: {
+    flex: 1,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    color: "#6B7280",
+  },
+  emptyContainer: {
+    flex: 1,
+    backgroundColor: "#FFF7ED",
+    padding: 24,
+    paddingTop: 75,
+  },
+  emptyTitle: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 28,
+  },
+  emptyBox: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 30,
+    alignItems: "center",
+  },
+  emptyMain: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  emptySub: {
+    color: "#6B7280",
+    marginTop: 8,
+    fontSize: 15,
+  },
+  menuBtn: {
+    backgroundColor: "#F97316",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+    marginTop: 22,
+  },
+  menuBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 16,
   },
 });
