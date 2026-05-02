@@ -1,27 +1,58 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
-export default function CartSummary({ totalAmount, totalItems }) {
+export default function CartSummary({
+  totalAmount,
+  totalItems,
+  onViewCart,
+  showButton = true,
+}) {
   return (
     <View style={styles.container}>
-      <Text style={styles.summaryText}>Items in Cart: {totalItems}</Text>
-      <Text style={styles.summaryText}>Total Price: ${totalAmount.toFixed(2)}</Text>
+      <View>
+        <Text style={styles.smallText}>Cart Summary</Text>
+        <Text style={styles.totalText}>
+          {totalItems} items • Rs. {totalAmount}
+        </Text>
+      </View>
+
+      {showButton && (
+        <TouchableOpacity style={styles.button} onPress={onViewCart}>
+          <Text style={styles.buttonText}>View Cart</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 8,
-    backgroundColor: "#FFF7ED",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    padding: 14,
+    backgroundColor: "#111827",
+    borderRadius: 22,
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  summaryText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#9A3412",
-    marginBottom: 4,
+  smallText: {
+    color: "#D1D5DB",
+    fontSize: 13,
+  },
+  totalText: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  button: {
+    backgroundColor: "#F97316",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "800",
   },
 });
