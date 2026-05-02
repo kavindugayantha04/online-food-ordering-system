@@ -1,100 +1,64 @@
-const Voucher = require("../models/Voucher");
-
-const PREDEFINED_VOUCHERS = {
-  SAVE10: { discount: 10, type: "percentage" },
-  FOOD20: { discount: 20, type: "percentage" },
-  WELCOME50: { discount: 50, type: "fixed" },
-};
-
-const DEFAULT_EXPIRY_DAYS = 30;
-
-const getDefaultExpiryDate = () => {
-  const now = new Date();
-  now.setDate(now.getDate() + DEFAULT_EXPIRY_DAYS);
-  return now;
-};
-
-const ensureVoucherFromPredefined = async (code) => {
-  const voucherConfig = PREDEFINED_VOUCHERS[code];
-  if (!voucherConfig) {
-    return null;
-  }
-
-  let voucher = await Voucher.findOne({ code });
-  if (!voucher) {
-    voucher = await Voucher.create({
-      code,
-      discount: voucherConfig.discount,
-      type: voucherConfig.type,
-      expiryDate: getDefaultExpiryDate(),
-    });
-  }
-
-  return voucher;
+const validVouchers = {
+  SAVE10: { type: "percentage", value: 10 },
+  FOOD20: { type: "percentage", value: 20 },
+  WELCOME50: { type: "fixed", value: 50 },
 };
 
 exports.applyVoucher = async (req, res) => {
   try {
-    const rawCode = req.body.code || req.body.voucherCode;
-    const code = String(rawCode || "").trim().toUpperCase();
-    const cartTotal = Number(req.body.cartTotal || 0);
+    const { voucherCode, cartTotal } = req.body;
 
-    if (!code) {
-      return res.status(400).json({ success: false, message: "Voucher code is required." });
-    }
-
-    let voucher = await Voucher.findOne({ code });
-
-    if (!voucher) {
-      voucher = await ensureVoucherFromPredefined(code);
-    }
-
-    if (!voucher) {
-      return res.status(404).json({
-        success: false,
-        message: "Invalid voucher code.",
-      });
-    }
-
-    const now = new Date();
-    if (new Date(voucher.expiryDate) < now) {
+    if (!voucherCode || voucherCode.trim() === "") {
       return res.status(400).json({
         success: false,
-        message: "This voucher has expired.",
+        message: "Voucher code is required",
       });
     }
 
-    const discountValue = Number(voucher.discount);
-    const discountType = voucher.type || "percentage";
-    const discountAmount =
-      cartTotal > 0
-        ? discountType === "fixed"
-          ? Math.min(discountValue, cartTotal)
-          : (cartTotal * discountValue) / 100
-        : 0;
-    const finalTotal = Math.max(cartTotal - discountAmount, 0);
-    const voucherImagePath = req.file ? `/uploads/vouchers/${req.file.filename}` : null;
+    if (!cartTotal || Number(cartTotal) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid cart total",
+      });
+    }
+
+    const code = voucherCode.trim().toUpperCase();
+    const voucher = validVouchers[code];
+
+    if (!voucher) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid voucher code. Please enter a valid code.",
+      });
+    }
+
+    let discount = 0;
+
+    if (voucher.type === "percentage") {
+      discount = (Number(cartTotal) * voucher.value) / 100;
+    } else {
+      discount = voucher.value;
+    }
+
+    const finalTotal = Math.max(Number(cartTotal) - discount, 0);
+
+    const voucherImagePath = req.file
+      ? `/uploads/vouchers/${req.file.filename}`
+      : null;
 
     return res.status(200).json({
       success: true,
-      message: "Voucher applied successfully.",
-      voucher: {
-        code: voucher.code,
-        discount: discountValue,
-        type: discountType,
-        expiryDate: voucher.expiryDate,
-      },
-      discountValue,
-      discountType,
-      discountAmount: Number(discountAmount.toFixed(2)),
-      finalTotal: Number(finalTotal.toFixed(2)),
-      uploadedImagePath: voucherImagePath,
+      message: "Voucher applied successfully",
+      voucherCode: code,
+      discount,
+      finalTotal,
+      voucherImage: voucherImagePath,
     });
   } catch (error) {
-    console.error("Apply voucher error:", error.message);
     return res.status(500).json({
       success: false,
-      message: "Server error while applying voucher.",
+      message: "Server error while applying voucher",
+      error: error.message,
     });
   }
 };
