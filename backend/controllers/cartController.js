@@ -109,7 +109,7 @@ exports.updateCartItemQuantity = async (req, res) => {
 
 exports.removeCartItem = async (req, res) => {
   try {
-    const { itemId } = req.params;
+    const { id } = req.params;
     const cart = await getOrCreateCart(req.user.id);
     const item = cart.items.id(id);
 
