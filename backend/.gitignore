@@ -1,6 +1,44 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+
+# Node
 node_modules/
+
+# Environment
 .env
-uploads/*
-!uploads/foods/
-!uploads/foods/.gitkeep
+.env.local
+.env.*.local
+
+# Build / output
+dist/
+build/
+web-build/
+coverage/
+
+# Expo
+.expo/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated / merge
+*.orig.*
+
+# Mobile native keys
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
