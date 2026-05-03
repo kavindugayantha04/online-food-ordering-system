@@ -1,36 +1,48 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
-require("dotenv").config();
+const dotenv = require("dotenv");
+const path = require("path");
+const connectDB = require("./config/db");
+
+dotenv.config();
+connectDB();
 
 const app = express();
 
-const DB_URL = process.env.MONGO_URI;
-
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection
-mongoose.connect(DB_URL)
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.log(err));
+app.get("/", (req, res) => {
+  res.send("Backend is running");
+});
 
-app.listen(5000, () => console.log("Server running on port 5000"));
+// Static uploads folder
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Routes
+app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/orders", require("./routes/orderRoutes"));
+app.use("/api/foods", require("./routes/foodRoutes"));
+app.use("/api/menu", require("./routes/menuRoutes"));
+app.use("/api/cart", require("./routes/cartRoutes"));
+app.use("/api/vouchers", require("./routes/voucherRoutes"));
+app.use("/api/payments", require("./routes/paymentRoutes"));
+app.use("/api/delivery", require("./routes/deliveryRoutes"));
+app.use("/api/reviews", require("./routes/reviewRoutes"));
 
-//connect delivery routes
-const deliveryRoutes = require("./routes/deliveryRoutes");
+// Error handler for multer/file upload errors
+app.use((err, req, res, next) => {
+  console.error(err.message);
 
-const path = require("path");
-const fs = require("fs");
+  res.status(500).json({
+    success: false,
+    message: err.message || "Server error",
+  });
+});
 
-// create uploads folder if not exists
-const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+const PORT = process.env.PORT || 5000;
 
-// serve images publicly
-app.use("/uploads", express.static(uploadDir));
-
-app.use("/api/delivery", deliveryRoutes);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
