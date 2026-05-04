@@ -17,6 +17,8 @@ import {
   deleteOrderApi,
 } from "../services/orderService";
 
+import UserSidebar from "../components/UserSidebar";
+
 export default function MyOrdersScreen() {
   const router = useRouter();
 
@@ -24,6 +26,7 @@ export default function MyOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [cancelLoadingId, setCancelLoadingId] = useState(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     loadMyOrders();
@@ -106,6 +109,8 @@ export default function MyOrdersScreen() {
 
   const getStatusStyle = (status) => {
     switch (status) {
+      case "Pending Payment":
+        return styles.pendingPayment;
       case "Pending":
         return styles.pending;
       case "Confirmed":
@@ -136,13 +141,30 @@ export default function MyOrdersScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.title}>My Orders</Text>
-      <Text style={styles.subtitle}>Track your food orders</Text>
+    <View style={styles.pageWrap}>
+      <UserSidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        router={router}
+      />
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+      <View style={styles.drawerHeader}>
+        <TouchableOpacity
+          style={styles.drawerMenuBtn}
+          onPress={() => setSidebarOpen(true)}
+        >
+          <Text style={styles.drawerMenuIcon}>☰</Text>
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.title}>My Orders</Text>
+          <Text style={styles.subtitle}>Track your food orders</Text>
+        </View>
+      </View>
 
       {orders.length === 0 ? (
         <View style={styles.emptyBox}>
@@ -178,6 +200,13 @@ export default function MyOrdersScreen() {
               </View>
             </View>
 
+            {order.status === "Cancelled" &&
+            String(order.cancelledBy) === "admin" ? (
+              <Text style={{ color: "red", fontWeight: "bold" }}>
+                Order Cancelled by Admin
+              </Text>
+            ) : null}
+
             <View style={styles.divider} />
 
             <Text style={styles.sectionTitle}>Items</Text>
@@ -211,6 +240,30 @@ export default function MyOrdersScreen() {
               </View>
             ) : null}
 
+            <View style={styles.paymentBox}>
+              <Text style={styles.paymentLabel}>Payment</Text>
+
+              {order.paymentMethod === "online_transfer" ? (
+                <>
+                  <Text style={styles.paymentText}>
+                    Online Transfer • {order.paymentStatus || "Waiting for Verification"}
+                  </Text>
+
+                  {order.paymentStatus === "Rejected" && (
+                    <View style={styles.paymentWarning}>
+                      <Text style={styles.paymentWarningText}>
+                        Your payment was rejected. Please contact admin or submit payment again.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.paymentText}>
+                  Cash on Delivery • Pay when delivered
+                </Text>
+              )}
+            </View>
+
             <View style={styles.footerRow}>
               <View style={styles.footerLeft}>
                 <Text style={styles.typeLabel}>Order Type</Text>
@@ -227,7 +280,8 @@ export default function MyOrdersScreen() {
               </View>
             </View>
 
-            {order.status === "Pending" && (
+            {(order.status === "Pending" ||
+              order.status === "Pending Payment") && (
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={() => handleCancelOrder(order._id)}
@@ -262,10 +316,35 @@ export default function MyOrdersScreen() {
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  pageWrap: {
+    flex: 1,
+    backgroundColor: "#FFF7ED",
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 18,
+  },
+  drawerMenuBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 3,
+  },
+  drawerMenuIcon: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#F97316",
+  },
   container: {
     flex: 1,
     backgroundColor: "#FFF7ED",
@@ -285,7 +364,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     marginTop: 5,
-    marginBottom: 18,
+    marginBottom: 0,
   },
   orderCard: {
     backgroundColor: "#fff",
@@ -330,6 +409,9 @@ const styles = StyleSheet.create({
   },
   pending: {
     backgroundColor: "#F59E0B",
+  },
+  pendingPayment: {
+    backgroundColor: "#EAB308",
   },
   confirmed: {
     backgroundColor: "#3B82F6",
@@ -524,5 +606,33 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     fontSize: 15,
+  },
+  paymentBox: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 10,
+  },
+  paymentLabel: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "800",
+  },
+  paymentText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+    marginTop: 3,
+  },
+  paymentWarning: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+  },
+  paymentWarningText: {
+    color: "#991B1B",
+    fontWeight: "800",
+    fontSize: 12,
   },
 });
