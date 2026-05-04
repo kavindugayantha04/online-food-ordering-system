@@ -15,6 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OrderItemCard from "../components/OrderItemCard";
 import CakeCustomization from "../components/CakeCustomization";
+import UserSidebar from "../components/UserSidebar";
 import { createOrderApi } from "../services/orderService";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -31,6 +32,7 @@ export default function OrderDetailsScreen() {
   const [customMessage, setCustomMessage] = useState("");
   const [customImage, setCustomImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const hasCake = useMemo(() => {
     return cartItems.some((item) => {
@@ -78,21 +80,29 @@ export default function OrderDetailsScreen() {
 
       const token = await AsyncStorage.getItem("token");
 
-      const orderData = {
-        items: prepareOrderItems(),
-        totalPrice,
-        orderType: "pickup",
-        customMessage: hasCake ? customMessage : "",
-        notes,
-      };
+      const formData = new FormData();
+      formData.append("items", JSON.stringify(prepareOrderItems()));
+      formData.append("totalPrice", String(totalPrice));
+      formData.append("orderType", "pickup");
+      formData.append("customMessage", hasCake ? customMessage : "");
+      formData.append("notes", notes);
+
+      if (customImage) {
+        const uriParts = customImage.split("/");
+        const filename = uriParts[uriParts.length - 1] || `cake-${Date.now()}.jpg`;
+        formData.append("customImage", {
+          uri: customImage,
+          name: filename,
+          type: "image/jpeg",
+        });
+      }
 
       const response = await fetch(`${API_URL}/orders`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(orderData),
+        body: formData,
       });
 
       const data = await response.json();
@@ -115,23 +125,23 @@ export default function OrderDetailsScreen() {
     }
   };
 
-  const handleCheckout = () => {
-    const orderData = {
-      items: prepareOrderItems(),
-      totalPrice,
-      orderType: "delivery",
-      customMessage: hasCake ? customMessage : "",
-      customImage,
-      notes,
-    };
-
-    router.push({
-      pathname: "/payment",
-      params: {
-        orderData: JSON.stringify(orderData),
-      },
-    });
+ const handleCheckout = () => {
+  const orderData = {
+    items: prepareOrderItems(),
+    totalPrice,
+    orderType: "delivery",
+    customMessage: hasCake ? customMessage : "",
+    customImage,
+    notes,
   };
+
+  router.push({
+    pathname: "/address-details",
+    params: {
+      orderData: JSON.stringify(orderData),
+    },
+  });
+};
 
   const handleSubmit = () => {
     if (loading) return;
@@ -149,9 +159,40 @@ export default function OrderDetailsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title}>Order Details</Text>
-      <Text style={styles.subtitle}>Review your order before continuing</Text>
+    <View style={styles.pageWrap}>
+      <UserSidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        router={router}
+      />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topHeader}>
+          <TouchableOpacity
+            style={styles.drawerMenuBtn}
+            onPress={() => setSidebarOpen(true)}
+          >
+            <Text style={styles.drawerMenuIcon}>☰</Text>
+          </TouchableOpacity>
+
+          <View style={styles.headerTitles}>
+            <Text style={styles.title}>Order Details</Text>
+            <Text style={styles.subtitle}>
+              Review your order before continuing
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.headerBackBtn}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.headerBackText}>←</Text>
+          </TouchableOpacity>
+        </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Order Items</Text>
@@ -265,26 +306,71 @@ export default function OrderDetailsScreen() {
           </Text>
         )}
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  pageWrap: {
     flex: 1,
     backgroundColor: "#FFF7ED",
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: "#FFF7ED",
+  },
+  content: {
     padding: 18,
+    paddingTop: 50,
+    paddingBottom: 40,
+  },
+  topHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 18,
+  },
+  drawerMenuBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 3,
+  },
+  drawerMenuIcon: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#F97316",
+  },
+  headerTitles: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerBackBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 3,
+  },
+  headerBackText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#F97316",
   },
   title: {
     fontSize: 28,
     fontWeight: "900",
     color: "#111827",
-    marginTop: 20,
   },
   subtitle: {
     color: "#6B7280",
     marginTop: 4,
-    marginBottom: 18,
     fontWeight: "600",
   },
   section: {
